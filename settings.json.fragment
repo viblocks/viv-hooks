@@ -1,0 +1,59 @@
+{
+  "_comment": "Fragment for consumer's .claude/settings.json. Glue these arrays into your settings.json. Adjust paths if vendoring location differs from .claude/hooks/.",
+  "permissions": {
+    "additionalDirectories": [".claude/.subagent-active.json"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/deny/enforce-secrets.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/deny/enforce-self-mod.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/deny/enforce-subagent-isolation.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/deny/enforce-routing.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/refinement/fast-lane.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/commit/audit-trail-gate.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/advisory/evidence-gate.sh" }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/advisory/fix-intent-gate.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/lifecycle/marker-register.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/lifecycle/marker-cleanup.sh" },
+          { "type": "command", "command": "bash ./.claude/hooks/advisory/post-impl-chain.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash ./.claude/hooks/advisory/skill-installed-advisor.sh" }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "CLAUDE_HOOKS_MODE": "hard",
+    "_CLAUDE_HOOKS_ROUTING_TABLE": "<optional override; defaults resolve to .claude/routing/routing-table.json or legacy .claude/context/routing-table.json>",
+    "_CLAUDE_HOOKS_WORKFLOWS_DIR": "<optional override; defaults resolve to .claude/workflows/>"
+  }
+}
