@@ -64,6 +64,15 @@ load_audit_trail_editor_policy() {
   jq -r '.editor_mode_policy // "block"' "$f" 2>/dev/null
 }
 
+# load_audit_trail_applies_to — echoes "class_a" | "all" | "any-staged-path".
+# Defaults to "class_a" when the rule file is missing or the field is absent.
+load_audit_trail_applies_to() {
+  local f
+  f=$(resolve_workflow_file "audit-trail-pattern.json")
+  [ -z "$f" ] && { echo "class_a"; return 0; }
+  jq -r '.applies_to // "class_a"' "$f" 2>/dev/null
+}
+
 load_fix_intent_keywords() {
   local f
   f=$(resolve_workflow_file "fix-intent-pattern.json")

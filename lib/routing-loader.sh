@@ -101,15 +101,20 @@ route_for_path() {
 }
 
 # reviewer_for_implementer <implementer-name>
-# Reads implementer-reviewer-pairings.json (default_rule: from-routing-table)
-# and routing-table.json. Echoes the reviewer agent name, or empty.
+# Reads implementer-reviewer-pairings.json + routing-table.json. Resolution:
+#
+#   1. Honor explicit overrides (always win)
+#   2. Honor default_rule:
+#        - "from-routing-table" (default) → derive reviewer from routing
+#        - "explicit-only" → no override + no derivation = no reviewer
+#
+# Echoes the reviewer agent name, or empty when none resolves.
 reviewer_for_implementer() {
   local impl="$1"
-  local rt
-  rt=$(resolve_routing_table_path)
-  [ -z "$rt" ] && { echo ""; return 0; }
-  # Check overrides first, then derive from routing-table.
   local pairings="${CLAUDE_HOOKS_PAIRINGS_FILE:-${CLAUDE_PROJECT_DIR:-$PWD}/.claude/workflows/implementer-reviewer-pairings.json}"
+  local default_rule="from-routing-table"
+
+  # Step 1: explicit overrides always win.
   if [ -f "$pairings" ]; then
     local override
     override=$(jq -r --arg i "$impl" '
@@ -121,11 +126,26 @@ reviewer_for_implementer() {
       echo "$override"
       return 0
     fi
+    # Read default_rule for the next step.
+    default_rule=$(jq -r '.default_rule // "from-routing-table"' "$pairings" 2>/dev/null)
   fi
-  # Default rule: derive from routing.
-  jq -r --arg i "$impl" '
-    .routes[]
-    | select(.implementer == $i)
-    | .reviewer // ""
-  ' "$rt" 2>/dev/null | head -n1
+
+  # Step 2: branch on default_rule.
+  case "$default_rule" in
+    explicit-only)
+      # No override matched and rule forbids derivation → empty.
+      echo ""
+      return 0
+      ;;
+    from-routing-table|*)
+      local rt
+      rt=$(resolve_routing_table_path)
+      [ -z "$rt" ] && { echo ""; return 0; }
+      jq -r --arg i "$impl" '
+        .routes[]
+        | select(.implementer == $i)
+        | .reviewer // ""
+      ' "$rt" 2>/dev/null | head -n1
+      ;;
+  esac
 }

@@ -77,4 +77,32 @@ All major behaviors representable. No coverage loss for the generic strategy.
 
 ## Identified during post-extraction review
 
-(Reserved for findings discovered after initial extraction.)
+End-to-end network validation (2026-05-08) cross-checked schema fields published
+by `viv-routing` and `viv-workflows` against fields actually consumed by
+`viv-hooks`. Two contract drifts were detected and corrected in commit after
+initial publication:
+
+### MED-1 (resolved) — `audit-trail-gate.sh` ignored `applies_to`
+
+Schema `audit-trail-pattern.schema.json` declares an enum
+`["class_a", "all", "any-staged-path"]`. Initial hook hardcoded `class_a`
+behavior regardless. Fix: added `load_audit_trail_applies_to` to
+`workflow-loader.sh` and switched the gate logic on the value. All three enum
+values now route through `TRIGGERED_PATHS` correctly.
+
+### MED-2 (resolved) — `routing-loader.reviewer_for_implementer` ignored `default_rule`
+
+Schema `implementer-reviewer-pairings.schema.json` declares
+`default_rule: enum["from-routing-table", "explicit-only"]`. Initial loader
+always fell through to routing-table even when the rule said `explicit-only`.
+Fix: read `default_rule` after checking overrides; branch on the value;
+`explicit-only` now returns empty when no override matches.
+
+### LOW-1 (deferred) — `security-reviewer` literal in OR playbook
+
+`viv-orchestration-rules/playbooks/post-implementation-chain.md` mentions
+`security-reviewer` literally in two places. Strictly violates SPEC Apéndice B
+invariant 7. Atenuante: `security-reviewer` is a singleton agent (no
+domain prefix, no tier variant) declared once in `viv-agents`. Decision:
+acceptable as-is; consumer can override the post-impl-chain JSON if they use
+a different security-review agent.

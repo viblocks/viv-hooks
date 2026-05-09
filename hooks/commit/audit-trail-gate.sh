@@ -52,6 +52,8 @@ if [ -z "$TRAILER_NAME" ] || [ -z "$TRAILER_PATTERN" ]; then
   exit 0
 fi
 
+APPLIES_TO=$(load_audit_trail_applies_to)
+
 # Determine staged paths (-a/--all expands to working-tree diff).
 if echo "$CMD" | grep -qE '\s(-a|--all)(\s|$)'; then
   DIFF_CMD="git diff --name-only HEAD"
@@ -60,37 +62,47 @@ else
 fi
 PATHS=$($DIFF_CMD 2>/dev/null || echo "")
 
-# Build Class A pattern array from routing-table.
-CLASS_A_PATTERNS=()
-load_class_a_patterns_array CLASS_A_PATTERNS
-if [ "${#CLASS_A_PATTERNS[@]}" -eq 0 ]; then
-  echo "WARN: no enforced routes in routing-table.json — audit-trail-gate cannot determine Class A scope" >&2
-  exit 0
-fi
+# Determine which staged paths trigger validation, per applies_to (per ADR-RD-005
+# the rule's enum drives the scope, not the hook).
+TRIGGERED_PATHS=""
+case "$APPLIES_TO" in
+  all)
+    # Every commit needs the trailer, regardless of staged paths.
+    TRIGGERED_PATHS=$(echo "$PATHS" | tr '\n' ' ')
+    [ -z "$(echo "$TRIGGERED_PATHS" | tr -d '[:space:]')" ] && exit 0  # nothing staged
+    ;;
+  any-staged-path)
+    # Trailer required when ANY path is staged (rare).
+    TRIGGERED_PATHS=$(echo "$PATHS" | tr '\n' ' ')
+    [ -z "$(echo "$TRIGGERED_PATHS" | tr -d '[:space:]')" ] && exit 0
+    ;;
+  class_a|*)
+    # Default: only Class A staged paths trigger the gate.
+    CLASS_A_PATTERNS=()
+    load_class_a_patterns_array CLASS_A_PATTERNS
+    if [ "${#CLASS_A_PATTERNS[@]}" -eq 0 ]; then
+      echo "WARN: no enforced routes in routing-table.json — audit-trail-gate cannot determine Class A scope (applies_to=class_a)" >&2
+      exit 0
+    fi
+    while IFS= read -r p; do
+      [ -z "$p" ] && continue
+      if is_class_a "$p" "${CLASS_A_PATTERNS[@]}"; then
+        TRIGGERED_PATHS="$TRIGGERED_PATHS $p"
+      fi
+    done <<< "$PATHS"
+    [ -z "$(echo "$TRIGGERED_PATHS" | tr -d '[:space:]')" ] && exit 0
+    ;;
+esac
 
-# Identify Class A staged paths.
-CLASS_A_PATHS=""
-while IFS= read -r p; do
-  [ -z "$p" ] && continue
-  if is_class_a "$p" "${CLASS_A_PATTERNS[@]}"; then
-    CLASS_A_PATHS="$CLASS_A_PATHS $p"
-  fi
-done <<< "$PATHS"
-
-# Pure Class B commit → allow.
-if [ -z "$(echo "$CLASS_A_PATHS" | tr -d '[:space:]')" ]; then
-  exit 0
-fi
-
-# Editor-mode check: -m/-F required when Class A staged (default policy).
+# Editor-mode check: -m/-F required when triggered (default policy).
 if ! echo "$CMD" | grep -qE '(\s-m\s|\s-m"|\s-m'"'"'|\s--message[= ]|\s-F\s|\s--file[= ])'; then
   case "$EDITOR_POLICY" in
     allow) : ;;  # explicitly allowed by rule
     warn)
-      echo "WARN: editor-mode commit on Class A paths (audit-trail-pattern policy=warn):$CLASS_A_PATHS" >&2
+      echo "WARN: editor-mode commit on gate-triggering paths (applies_to=$APPLIES_TO, policy=warn):$TRIGGERED_PATHS" >&2
       ;;
     block|*)
-      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"COMMIT GATE: Class A files staged (%s). Must use -m/--message or -F/--file to enable %s trailer validation. Editor-mode commits bypass trailer check and are blocked for Class A paths."}}' "$(echo "$CLASS_A_PATHS" | tr -s ' ')" "$TRAILER_NAME"
+      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"COMMIT GATE (applies_to=%s): files staged (%s). Must use -m/--message or -F/--file to enable %s trailer validation. Editor-mode commits bypass trailer check and are blocked."}}' "$APPLIES_TO" "$(echo "$TRIGGERED_PATHS" | tr -s ' ')" "$TRAILER_NAME"
       exit 2
       ;;
   esac
@@ -119,7 +131,7 @@ TRAILER_REGEX="${TRAILER_NAME}:[[:space:]]*${TRAILER_PATTERN}"
 TRAILER_REGEX_STRIPPED=$(echo "$TRAILER_REGEX" | sed -E 's/\^//g; s/\$//g')
 
 if ! echo "$MSG" | grep -qE "$TRAILER_REGEX_STRIPPED"; then
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"COMMIT GATE: Missing %s trailer for Class A commit. Required value pattern: %s. Staged Class A paths:%s"}}' "$TRAILER_NAME" "$TRAILER_PATTERN" "$(echo "$CLASS_A_PATHS" | tr -s ' ')"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"COMMIT GATE (applies_to=%s): Missing %s trailer. Required value pattern: %s. Triggering paths:%s"}}' "$APPLIES_TO" "$TRAILER_NAME" "$TRAILER_PATTERN" "$(echo "$TRIGGERED_PATHS" | tr -s ' ')"
   exit 2
 fi
 
