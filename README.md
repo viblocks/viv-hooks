@@ -1,5 +1,15 @@
 # viv-hooks
 
+> ⚠️ **Internal component of [viv-typed-agents](https://github.com/viblocks/viv-typed-agents).**
+>
+> The recommended install path is the typed-agents product, not this repo standalone:
+> ```bash
+> git clone https://github.com/viblocks/viv-typed-agents
+> ./viv-typed-agents/scripts/install.sh /path/to/your-project --tier 4
+> ```
+>
+> This repo is public for transparency and as a surgical-use escape hatch (`cp -r` individual hooks). See [ADR-RD-010](https://github.com/viblocks/viv-typed-agents/blob/main/architecture/decisions/ADR-RD-010-product-composition.md) for product composition rationale.
+
 Structural enforcement layer for the typed-agents strategy. The **only repo with executable code** (per [ADR-RD-008](https://github.com/viblocks/viv-typed-agents/blob/main/architecture/decisions/ADR-RD-008-pure-descriptors.md)).
 
 This is the **Tier 4** component — vendoring it elevates the strategy from "behavioral guidance" to "structural enforcement". Without these hooks, the IRON LAW is advisory; with them, wrong dispatches are physically blocked at Edit/Write time.
