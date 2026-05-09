@@ -83,6 +83,11 @@ If a contract file is missing, the corresponding hook **logs a warning to stderr
 4. **Set mode** (optional): `CLAUDE_HOOKS_MODE=hard` (default) | `disabled` (bypass all)
 5. **Verify**: dispatch a test agent and confirm hooks fire (look for stderr/blocks)
 
+## Prerequisites
+
+- Project must be a **git repository** — `marker-register.sh` calls `git rev-parse --git-common-dir` to derive the marker scope. In a non-git directory the lifecycle hook errors out (exit 128). For test/sandbox projects: `git init` before exercising hooks.
+- `bash` (5.0+ recommended; tested down to bash 3.2 on macOS), `jq` (1.6+), `python3` (3.8+) on PATH. See `architecture/decisions/ADR-001-bash-as-runtime.md`.
+
 ## Hook taxonomy (per ADR-RD-006)
 
 | Type | Behavior | Honors `disabled` | Honors `warn` |

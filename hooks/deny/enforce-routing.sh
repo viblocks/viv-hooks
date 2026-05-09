@@ -87,7 +87,7 @@ check_path() {
   esac
   [ -z "$abs" ] && emit_block "BLOCKED (routing): canonicalization failed for '$fp' — fail-closed."
   if is_class_a "$abs" "${CLASS_A_PATTERNS[@]}"; then
-    emit_block "BLOCKED (routing): '$fp' is a Class A path — dispatch the typed agent for this domain per .claude/routing/routing-table.json. Main session must not edit services/**, packages/**, infra paths (workflows, Dockerfile*, docker-compose*, Makefile, scripts/**) directly."
+    emit_block "BLOCKED (routing): '$fp' matches an enforced route in routing-table.json — dispatch the typed agent for this domain. Main session must not edit Class A paths directly. See .claude/routing/routing-table.json (routes where enforced=true)."
   fi
 }
 
@@ -149,7 +149,7 @@ case "$TOOL_NAME" in
       [ -z "$tgt_abs" ] && tgt_abs="$tgt"
       if is_class_a "$tgt_abs" "${CLASS_A_PATTERNS[@]}"; then
         literal_hit=1
-        emit_block "BLOCKED (routing): Bash command writes to Class A path '$tgt'. Dispatch the typed agent per .claude/routing/routing-table.json."
+        emit_block "BLOCKED (routing): Bash command writes to Class A path '$tgt'. Dispatch the typed agent for this domain (see .claude/routing/routing-table.json)."
       fi
     done <<< "$TARGETS"
 
