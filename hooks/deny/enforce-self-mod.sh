@@ -69,12 +69,19 @@ is_self_mod_path() {
   esac
   shopt -u nocasematch
   # Root-level CLAUDE.md only. Subdir CLAUDE.md (.claude/agents/*/CLAUDE.md
-  # etc.) are per-agent docs, not the enforcement layer.
+  # etc., or any consumer-defined orchestrator's per-rule CLAUDE.md) are
+  # per-agent or per-rule docs, not the enforcement layer.
+  #
+  # Generic pattern: any CLAUDE.md nested 2+ levels under a directory
+  # starting with `.` (dotdir) is treated as per-rule documentation, NOT
+  # the root enforcement layer. This covers .claude/, .aidlc-rule-details/,
+  # .cursor/, and any future orchestrator-rule paths without hardcoding.
   shopt -s nocasematch
   case "$p" in
     */CLAUDE.md|CLAUDE.md)
       case "$p" in
-        */.claude/*/CLAUDE.md|*/agents/*/CLAUDE.md|*/.aidlc-rule-details/*/CLAUDE.md) shopt -u nocasematch; return 1 ;;
+        */agents/*/CLAUDE.md) shopt -u nocasematch; return 1 ;;
+        */.[a-z]*/*/CLAUDE.md|.[a-z]*/*/CLAUDE.md) shopt -u nocasematch; return 1 ;;
         *) shopt -u nocasematch; return 0 ;;
       esac
       ;;

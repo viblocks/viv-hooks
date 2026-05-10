@@ -16,8 +16,9 @@
 #        gitignore, gitattributes)
 #     3. Path does NOT match app-code patterns (services/*/src/**, packages/*/src/**)
 #     4. Path does NOT match security-sensitive patterns:
-#         - self-modification: CLAUDE.md, AGENTS.md, GEMINI.md, .claude/**,
-#           .aidlc-rule-details/**, .cursor/**, .github/**
+#         - self-modification: CLAUDE.md, AGENTS.md, GEMINI.md, and any
+#           dotdir-rule-paths (.claude/**, .cursor/**, .github/**, and any
+#           consumer-defined orchestrator paths like .<orchestrator>-rule-details/**)
 #         - supply chain: package.json, lockfiles, docker-compose*, Dockerfile*,
 #           tsconfig*, Makefile, .npmrc, .yarnrc*
 #         - reviewer trust: .gitignore, .gitattributes, .gitmodules
@@ -114,11 +115,16 @@ is_security_sensitive() {
   case "$base" in
     CLAUDE.md|AGENTS.md|GEMINI.md) return 0 ;;
   esac
+  # Dotdir-rule paths: any directory starting with `.` that hosts orchestrator
+  # rules or per-tool config (.claude/, .cursor/, .github/, and any consumer-
+  # defined .<orchestrator>-rule-details/ such as .aidlc-rule-details/) is
+  # treated as self-modification — fast-lane never bypasses these.
   case "$p" in
     */.claude/*|.claude/*|*/.claude|.claude) return 0 ;;
-    */.aidlc-rule-details/*|.aidlc-rule-details/*) return 0 ;;
     */.cursor/*|.cursor/*) return 0 ;;
     */.github/*|.github/*) return 0 ;;
+    # Generic: any dotdir matching .<name>-rule-details/ pattern
+    */.[a-z]*-rule-details/*|.[a-z]*-rule-details/*) return 0 ;;
   esac
 
   # --- Supply-chain / runtime config ---------------------------------------
