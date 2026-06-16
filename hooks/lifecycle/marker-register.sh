@@ -136,7 +136,7 @@ if [ "$LIBS_AVAILABLE" = "1" ]; then
   # orphaned entries from sessions that terminated before PostToolUse fired).
   _purge_expired_subagents "$REG_SCOPE" 2>/dev/null || true
 
-  register_subagent "$TOOL_USE_ID" "$AGENT" "$REG_SCOPE" "$ALLOW_ASM" 600 2>/dev/null || true
+  register_subagent "$TOOL_USE_ID" "$AGENT" "$REG_SCOPE" "$ALLOW_ASM" "${VIV_MARKER_TTL_SECONDS:-1800}" 2>/dev/null || true
 
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","registered_scope":"%s","registered_id":"%s"}}\n' "$REG_SCOPE" "$TOOL_USE_ID"
 fi
