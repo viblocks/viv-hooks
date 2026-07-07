@@ -161,6 +161,45 @@ else
   ko "2c. sync cleanup unregisters by tool_use_id" "entry count=$(entry_count tu-sync-1)"
 fi
 
+
+# =============================================================================
+echo "--- Task 3: SubagentStop hook removes by agent_id ---"
+
+subagent_stop() {  # subagent_stop <agentId>
+  local aid="$1"
+  local payload
+  payload=$(jq -cn --arg aid "$aid" --arg cwd "$FAKE_REPO" \
+    '{hook_event_name:"SubagentStop", agent_id:$aid, cwd:$cwd}')
+  env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+    bash "$SUBSTOP_HOOK" <<< "$payload" >/dev/null 2>&1
+}
+
+# Full async lifecycle: register → async cleanup (annotate) → SubagentStop (remove).
+clean_marker
+register_via_hook "tu-e2e-1"
+cleanup_async "tu-e2e-1" "agent-e2e-1"
+[ "$(entry_count tu-e2e-1)" = "1" ] \
+  && ok "3a. marker present after async launch" \
+  || ko "3a. marker present after async launch" "count=$(entry_count tu-e2e-1)"
+
+subagent_stop "agent-e2e-1"
+if [ "$(entry_count tu-e2e-1)" = "0" ]; then
+  ok "3b. SubagentStop removes the marker by agent_id (async race fixed)"
+else
+  ko "3b. SubagentStop removes the marker by agent_id" "count=$(entry_count tu-e2e-1)"
+fi
+
+# SubagentStop for an unknown agent_id is a safe no-op (does not crash / non-zero).
+clean_marker
+register_via_hook "tu-e2e-2"
+cleanup_async "tu-e2e-2" "agent-e2e-2"
+subagent_stop "some-other-agent"
+if [ "$(entry_count tu-e2e-2)" = "1" ]; then
+  ok "3c. SubagentStop with unknown agent_id leaves the marker intact"
+else
+  ko "3c. SubagentStop with unknown agent_id leaves the marker intact" "count=$(entry_count tu-e2e-2)"
+fi
+
 echo ""
 echo "Results: $PASS pass, $FAIL fail"
 [ "$FAIL" -eq 0 ]
