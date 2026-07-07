@@ -113,6 +113,7 @@ register_via_hook() {  # register_via_hook <tool_use_id>
                   prompt:"Intent: feature — add wallet endpoint"},
       cwd:$cwd}')
   env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+    ${VIV_MARKER_TTL_SECONDS:+VIV_MARKER_TTL_SECONDS="$VIV_MARKER_TTL_SECONDS"} \
     bash "$REGISTER_HOOK" <<< "$payload" >/dev/null 2>&1
 }
 
@@ -198,6 +199,23 @@ if [ "$(entry_count tu-e2e-2)" = "1" ]; then
   ok "3c. SubagentStop with unknown agent_id leaves the marker intact"
 else
   ko "3c. SubagentStop with unknown agent_id leaves the marker intact" "count=$(entry_count tu-e2e-2)"
+fi
+
+# =============================================================================
+echo "--- Task 4: crash-fallback (TTL purge still reclaims async markers) ---"
+
+# Register an async marker with a 1-second TTL, never send SubagentStop, let it
+# expire, then trigger a new registration → _purge_expired_subagents drops it.
+clean_marker
+VIV_MARKER_TTL_SECONDS=1 register_via_hook "tu-stale-1"
+cleanup_async "tu-stale-1" "agent-stale-1"   # marker present, no SubagentStop
+sleep 2
+register_via_hook "tu-fresh-1"               # register hook purges expired first
+if [ "$(entry_count tu-stale-1)" = "0" ] && [ "$(entry_count tu-fresh-1)" = "1" ]; then
+  ok "4a. expired async marker is purged on next registration (crash-fallback)"
+else
+  ko "4a. expired async marker is purged on next registration" \
+     "stale=$(entry_count tu-stale-1) fresh=$(entry_count tu-fresh-1)"
 fi
 
 echo ""
