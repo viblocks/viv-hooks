@@ -53,11 +53,13 @@ ERR_LOG="${TMPDIR:-/tmp}/posttooluse-unregister-error.log"
 # harness may omit while still backgrounding). Annotate the entry with the
 # harness agentId so SubagentStop can remove it at real completion. See
 # orchestrator#39.
-STATUS=$(echo "$INPUT" | jq -r '.tool_response.status // ""')
+STATUS=$(echo "$INPUT" | jq -r 'if (.tool_response|type)=="object" then (.tool_response.status // "") else "" end')
 if [ "$STATUS" = "async_launched" ]; then
   AGENT_ID=$(echo "$INPUT" | jq -r '.tool_response.agentId // ""')
   if [ -n "$AGENT_ID" ] && [ "$AGENT_ID" != "null" ]; then
     set_agent_id "$ID" "$AGENT_ID" "$SCOPE" 2>>"$ERR_LOG" || true
+  else
+    echo "posttooluse-agent: async_launched with no agentId — marker ID=$ID left for TTL reclaim (SCOPE=$SCOPE)" >>"$ERR_LOG"
   fi
   exit 0
 fi

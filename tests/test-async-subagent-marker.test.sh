@@ -218,6 +218,65 @@ else
      "stale=$(entry_count tu-stale-1) fresh=$(entry_count tu-fresh-1)"
 fi
 
+# =============================================================================
+echo "--- Fix 1: sync cleanup emits no jq error to stderr ---"
+
+# Sync completion with a string tool_response must not produce a jq type error
+# on stderr (jq: error (Cannot index string with string "status")).
+clean_marker
+register_via_hook "tu-fix1-1"
+STDERR_FILE="$TMP_ROOT/fix1-stderr.log"
+payload=$(jq -cn --arg id "tu-fix1-1" --arg cwd "$FAKE_REPO" \
+  '{tool_name:"Agent", tool_use_id:$id, cwd:$cwd,
+    tool_response:"Done. Summary of the subagent run."}')
+env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+  bash "$CLEANUP_HOOK" <<< "$payload" 2>"$STDERR_FILE" >/dev/null
+
+if [ "$(entry_count tu-fix1-1)" = "0" ]; then
+  ok "F1a. sync cleanup still unregisters the marker"
+else
+  ko "F1a. sync cleanup still unregisters the marker" "entry count=$(entry_count tu-fix1-1)"
+fi
+if ! grep -q 'jq: error' "$STDERR_FILE"; then
+  ok "F1b. sync cleanup emits no jq error to stderr"
+else
+  ko "F1b. sync cleanup emits no jq error to stderr" "stderr: $(cat "$STDERR_FILE")"
+fi
+
+# =============================================================================
+echo "--- Fix 2: async_launched with empty agentId leaves marker un-annotated ---"
+
+# Async launch with an empty agentId must leave the marker present (no premature
+# unregister) and WITHOUT an agent_id annotation, relying on TTL to reclaim it.
+clean_marker
+VIV_MARKER_TTL_SECONDS=1 register_via_hook "tu-fix2-1"
+payload=$(jq -cn --arg id "tu-fix2-1" --arg cwd "$FAKE_REPO" \
+  '{tool_name:"Agent", tool_use_id:$id, cwd:$cwd,
+    tool_response:{status:"async_launched", agentId:""}}')
+env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+  bash "$CLEANUP_HOOK" <<< "$payload" >/dev/null 2>&1
+
+if [ "$(entry_count tu-fix2-1)" = "1" ]; then
+  ok "F2a. empty-agentId async launch leaves the marker present"
+else
+  ko "F2a. empty-agentId async launch leaves the marker present" "entry count=$(entry_count tu-fix2-1)"
+fi
+if [ "$(entry_field tu-fix2-1 agent_id)" = "MISSING_FIELD" ]; then
+  ok "F2b. empty-agentId async launch leaves the marker un-annotated"
+else
+  ko "F2b. empty-agentId async launch leaves the marker un-annotated" "got '$(entry_field tu-fix2-1 agent_id)'"
+fi
+
+# TTL still reclaims the un-annotated marker (crash-fallback still works here too).
+sleep 2
+register_via_hook "tu-fix2-fresh"
+if [ "$(entry_count tu-fix2-1)" = "0" ] && [ "$(entry_count tu-fix2-fresh)" = "1" ]; then
+  ok "F2c. TTL purge reclaims the empty-agentId marker on next registration"
+else
+  ko "F2c. TTL purge reclaims the empty-agentId marker" \
+     "stale=$(entry_count tu-fix2-1) fresh=$(entry_count tu-fix2-fresh)"
+fi
+
 echo ""
 echo "Results: $PASS pass, $FAIL fail"
 [ "$FAIL" -eq 0 ]
