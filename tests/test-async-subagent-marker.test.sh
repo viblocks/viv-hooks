@@ -99,6 +99,68 @@ else
   ko "1f. unregister_by_agent_id removes marker file when empty" "file still present"
 fi
 
+
+# =============================================================================
+echo "--- Task 2: PostToolUse async-aware cleanup ---"
+
+# Register via the real PreToolUse hook, then run the real PostToolUse cleanup.
+register_via_hook() {  # register_via_hook <tool_use_id>
+  local id="$1"
+  local payload
+  payload=$(jq -cn --arg id "$id" --arg cwd "$FAKE_REPO" \
+    '{tool_name:"Agent", tool_use_id:$id,
+      tool_input:{subagent_type:"nestjs-crypto-implementer",
+                  prompt:"Intent: feature — add wallet endpoint"},
+      cwd:$cwd}')
+  env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+    bash "$REGISTER_HOOK" <<< "$payload" >/dev/null 2>&1
+}
+
+cleanup_async() {  # cleanup_async <tool_use_id> <agentId>
+  local id="$1" aid="$2"
+  local payload
+  payload=$(jq -cn --arg id "$id" --arg aid "$aid" --arg cwd "$FAKE_REPO" \
+    '{tool_name:"Agent", tool_use_id:$id, cwd:$cwd,
+      tool_response:{status:"async_launched", agentId:$aid}}')
+  env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+    bash "$CLEANUP_HOOK" <<< "$payload" >/dev/null 2>&1
+}
+
+cleanup_sync() {  # cleanup_sync <tool_use_id>
+  local id="$1"
+  local payload
+  payload=$(jq -cn --arg id "$id" --arg cwd "$FAKE_REPO" \
+    '{tool_name:"Agent", tool_use_id:$id, cwd:$cwd,
+      tool_response:"Done. Summary of the subagent run."}')
+  env -i PATH="$PATH" HOME="$HOME" CLAUDE_HOOKS_MODE=disabled \
+    bash "$CLEANUP_HOOK" <<< "$payload" >/dev/null 2>&1
+}
+
+# Async launch: marker MUST remain and be annotated with agentId.
+clean_marker
+register_via_hook "tu-async-1"
+cleanup_async "tu-async-1" "agent-async-1"
+if [ "$(entry_count tu-async-1)" = "1" ]; then
+  ok "2a. async cleanup keeps the marker (no premature unregister)"
+else
+  ko "2a. async cleanup keeps the marker" "entry count=$(entry_count tu-async-1)"
+fi
+if [ "$(entry_field tu-async-1 agent_id)" = "agent-async-1" ]; then
+  ok "2b. async cleanup annotates agent_id for later SubagentStop"
+else
+  ko "2b. async cleanup annotates agent_id" "got '$(entry_field tu-async-1 agent_id)'"
+fi
+
+# Sync completion: marker MUST be removed by tool_use_id (unchanged behavior).
+clean_marker
+register_via_hook "tu-sync-1"
+cleanup_sync "tu-sync-1"
+if [ "$(entry_count tu-sync-1)" = "0" ]; then
+  ok "2c. sync cleanup unregisters by tool_use_id (unchanged)"
+else
+  ko "2c. sync cleanup unregisters by tool_use_id" "entry count=$(entry_count tu-sync-1)"
+fi
+
 echo ""
 echo "Results: $PASS pass, $FAIL fail"
 [ "$FAIL" -eq 0 ]

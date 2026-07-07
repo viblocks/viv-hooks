@@ -46,6 +46,24 @@ fi
 [ -z "$SCOPE" ] && exit 0
 
 ERR_LOG="${TMPDIR:-/tmp}/posttooluse-unregister-error.log"
+
+# Async (background) dispatch: PostToolUse fires at LAUNCH, not completion, so
+# the subagent is still running and MUST keep its marker. Detect via the
+# tool_response async signature (NOT tool_input.run_in_background, which the
+# harness may omit while still backgrounding). Annotate the entry with the
+# harness agentId so SubagentStop can remove it at real completion. See
+# orchestrator#39.
+STATUS=$(echo "$INPUT" | jq -r '.tool_response.status // ""')
+if [ "$STATUS" = "async_launched" ]; then
+  AGENT_ID=$(echo "$INPUT" | jq -r '.tool_response.agentId // ""')
+  if [ -n "$AGENT_ID" ] && [ "$AGENT_ID" != "null" ]; then
+    set_agent_id "$ID" "$AGENT_ID" "$SCOPE" 2>>"$ERR_LOG" || true
+  fi
+  exit 0
+fi
+
+# Synchronous completion: the tool returned after the subagent finished, so
+# unregister by tool_use_id — unchanged behavior.
 if ! unregister_subagent "$ID" "$SCOPE" 2>>"$ERR_LOG"; then
   echo "posttooluse-agent: unregister failed — ID=$ID SCOPE=$SCOPE (see $ERR_LOG)" >&2
 fi
