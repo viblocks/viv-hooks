@@ -134,6 +134,43 @@ unregister_subagent() {
   ' _ "$marker" "$id"
 }
 
+# set_agent_id <id> <agent_id> <scope>
+# Annotates the entry matching <id> (the tool_use_id used at register time) with
+# the harness subagent <agent_id> (from PostToolUse tool_response.agentId), so the
+# SubagentStop hook can correlate real completion → entry for background dispatch.
+# Idempotent: no-op if marker file or entry is absent.
+set_agent_id() {
+  local id="$1" agent_id="$2" scope="$3"
+  local marker; marker=$(_marker_path "$scope")
+  [ -f "$marker" ] || return 0
+  _with_lock "$scope" bash -c '
+    marker="$1"; id="$2"; agent_id="$3"
+    [ -f "$marker" ] || exit 0
+    jq --arg id "$id" --arg aid "$agent_id" \
+      ".subagents |= map(if .id == \$id then .agent_id = \$aid else . end)" \
+      "$marker" > "$marker.tmp" && mv "$marker.tmp" "$marker"
+  ' _ "$marker" "$id" "$agent_id"
+}
+
+# unregister_by_agent_id <agent_id> <scope>
+# Removes the entry whose agent_id matches (SubagentStop carries agent_id, not
+# tool_use_id). Entries without an agent_id are left untouched. Idempotent;
+# empty subagents array → marker file removed. Mirrors unregister_subagent.
+unregister_by_agent_id() {
+  local agent_id="$1" scope="$2"
+  local marker; marker=$(_marker_path "$scope")
+  [ -f "$marker" ] || return 0
+  _with_lock "$scope" bash -c '
+    marker="$1"; aid="$2"
+    [ -f "$marker" ] || exit 0
+    jq --arg aid "$aid" ".subagents |= map(select(.agent_id != \$aid))" \
+      "$marker" > "$marker.tmp" && mv "$marker.tmp" "$marker"
+    if [ "$(jq ".subagents | length" "$marker")" = "0" ]; then
+      rm -f "$marker"
+    fi
+  ' _ "$marker" "$agent_id"
+}
+
 # list_active_subagents <scope>
 # Echoes JSON array of fresh (non-stale) entries. Empty array if marker missing.
 list_active_subagents() {

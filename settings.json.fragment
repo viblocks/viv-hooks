@@ -49,6 +49,16 @@
           { "type": "command", "command": "bash ./.claude/hooks/advisory/skill-installed-advisor.sh" }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./.claude/hooks/lifecycle/marker-subagent-stop.sh"
+          }
+        ]
+      }
     ]
   },
   "env": {
